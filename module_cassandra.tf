@@ -1,0 +1,20 @@
+module "cassandra_cluster" {
+  #source                 = "github.com/terraform-aws-modules/terraform-aws-ec2-instance.git"
+  source  = "./modules/cassandra"
+  #version = "0.1.0"
+  vpc_id                      = aws_vpc.main.id
+  cluster_name                = "cassandra_cluster"
+  instance_count              = 5
+  vpc_cidr                    = var.vpc_cidr
+  azs                         = var.azs
+  ami                         = data.aws_ami.base_ami.id
+  instance_type               = var.instance_type
+  ec2key_name                 = aws_key_pair.ec2key.key_name
+  vpc_security_group_ids      = [aws_security_group.vpc_sg.id]
+  aws_subnets                 = aws_subnet.private_subnets
+  private_key_path            = var.private_key_path
+  bastion_host_ip             = aws_instance.bastion.public_ip
+  user_data_file_path         = var.user_data_file_path
+  tag_name                    = var.tag_name
+  this_depends_on             = [aws_subnet.private_subnets]
+}
