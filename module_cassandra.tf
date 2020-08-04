@@ -4,7 +4,7 @@ module "cassandra_cluster" {
   #version = "0.1.0"
   vpc_id                      = aws_vpc.main.id
   cluster_name                = "cassandra_cluster"
-  instance_count              = 5
+  instance_count              = 6
   vpc_cidr                    = var.vpc_cidr
   azs                         = var.azs
   ami                         = data.aws_ami.base_ami.id

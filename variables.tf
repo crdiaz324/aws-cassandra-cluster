@@ -30,7 +30,7 @@ variable "private_subnet_cidrs" {
 }
 
 variable "public_subnet_cidr" {
-  default 		       = "10.1.100.0/24"
+  default 		       = "10.1.0.0/24"
 }
 
 
