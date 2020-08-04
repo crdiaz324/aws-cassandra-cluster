@@ -27,10 +27,6 @@ resource "aws_security_group" "vpc_sg" {
     cidr_blocks = [var.vpc_cidr]
   }
 
-  tags = {
-    Name          = var.tag_name
-  }
-
   # outbound traffic
   egress {
     from_port   = 0
@@ -38,4 +34,37 @@ resource "aws_security_group" "vpc_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  # Promethius for monitoring
+  ingress {
+    from_port     = 9090
+    to_port       = 9090
+    protocol      = "tcp"
+    cidr_blocks   = [var.vpc_cidr]
+  }
+
+  # CQL access from the VPC
+  ingress {
+    from_port     = 9042
+    to_port       = 9042
+    protocol      = "tcp"
+    cidr_blocks   = [var.vpc_cidr]
+  }
+
+  # internode communication from the VPC
+  ingress {
+    from_port     = 7000
+    to_port       = 7000
+    protocol      = "tcp"
+    cidr_blocks   = [var.vpc_cidr]
+  }
+
+  # jmx communication from VPC
+  ingress {
+    from_port     = 7199
+    to_port       = 7199
+    protocol      = "tcp"
+    cidr_blocks   = [var.vpc_cidr]
+  }  
+
 }

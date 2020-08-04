@@ -54,6 +54,8 @@ resource "aws_instance" "cassandra" {
 
   provisioner "remote-exec" {
     inline = [
+      "echo '${file(var.private_key_path)}' > ~/.ssh/id_rsa",
+      "chmod 400 ~/.ssh/id_rsa",
       "for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do     [ -f $CPUFREQ ] || continue;     echo -n performance > $CPUFREQ; done",
       "echo 'net.ipv4.tcp_keepalive_time=60' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_probes=3' |sudo tee -a /etc/sysctl.conf",
@@ -115,12 +117,6 @@ data "aws_instances" "seeds" {
   ]
 }
 
-#locals {
-#  cassandra_nodes = {
-#    for instance in aws_instance.cassandra:
-#    instance.private_ip => instance.availability_zone
-#  }
-#}
 
 resource "null_resource" "configure_cassandra" {
   count                  = var.instance_count
@@ -148,15 +144,13 @@ resource "null_resource" "configure_cassandra" {
       "sudo sed -ci \"s/cluster_name: 'Test Cluster'/cluster_name: '${var.cluster_name}'/g\" /etc/cassandra/conf/cassandra.yaml",
       "sudo sed -ci 's/num_tokens: 256/num_tokens: 8/g' /etc/cassandra/conf/cassandra.yaml",
       "export ip=`hostname -I` && sudo sed -ci \"s/listen_address: localhost/listen_address: $ip/g\" /etc/cassandra/conf/cassandra.yaml",
-      "export ip=`hostname -I` && sudo sed -ci \"s/# native_transport_broadcast_address: 1.2.3.4/native_transport_broadcast_address: $ip/g\" /etc/cassandra/conf/cassandra.yaml",
-      "export ip=`hostname -I` && sudo sed -ci \"s/native_transport_address: localhost/native_transport_address: 0.0.0.0/g\" /etc/cassandra/conf/cassandra.yaml",
+      "export ip=`hostname -I` && sudo sed -ci \"s/rpc_address: localhost/rpc_address: $ip/g\" /etc/cassandra/conf/cassandra.yaml",
       "export ip=`hostname -I` && sudo sed -ci \"s/endpoint_snitch: com.datastax.bdp.snitch.DseSimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g\" /etc/cassandra/conf/cassandra.yaml",
       #"sudo sed -ci \"s/127.0.0.1/'${join(",", data.aws_instances.seeds.private_ips)}'/g\" /etc/cassandra/conf/cassandra.yaml",
       "sudo sed -ci \"s/seeds:.*/seeds: '${join(",", data.aws_instances.seeds.private_ips)}'/g\" /etc/cassandra/conf/cassandra.yaml",
       "sudo chkconfig cassandra on",
       "sudo service cassandra start",
       "sudo chkconfig cassandra on",
-      #"sudo service cassandra start"
     ]
   }
 }
@@ -219,22 +213,3 @@ resource "null_resource" "start_cluster" {
   }
 }
 
-#module "seeds" {
-#  source          = "./modules/terraform-aws-ssm-parameter-store"
-#  parameter_write = [{
-#  name            = "/cassandra/dev/seeds"
-#  value           = "tostring(${aws_instance.cassandra.1.private_ip}, ${aws_instance.cassandra.2.private_ip})"
-#  type            = "String"
-#  overwrite       = "true"
-#  description     = "List of seed nodes"
-#  }]
-#}
-
-#resource "null_resource" "write_cassandra_ip_addresses" {
-#  count = var.instance_count
-#  depends_on = [aws_instance.cassandra]
-#  
-#  provisioner "local-exec" {
-#    command = "echo '${join("\n", formatlist("instance=%v ; private=%v ; az=%v", aws_instance.cassandra.*.id, aws_instance.cassandra.*.private_ip, aws_instance.cassandra.*.availability_zone))}' | awk '{print \"node=${var.name}-\" NR-1 \" ; \" $0}' > \"/tmp/cluster_ips.txt\""
-#  }
-#}
