@@ -140,17 +140,17 @@ resource "null_resource" "configure_cassandra" {
   }
 
   provisioner "remote-exec" {
-    inline = [
-      "sudo sed -ci \"s/cluster_name: 'Test Cluster'/cluster_name: '${var.cluster_name}'/g\" /etc/cassandra/conf/cassandra.yaml",
-      "sudo sed -ci 's/num_tokens: 256/num_tokens: 8/g' /etc/cassandra/conf/cassandra.yaml",
-      "export ip=`hostname -I` && sudo sed -ci \"s/listen_address: localhost/listen_address: $ip/g\" /etc/cassandra/conf/cassandra.yaml",
-      "export ip=`hostname -I` && sudo sed -ci \"s/rpc_address: localhost/rpc_address: $ip/g\" /etc/cassandra/conf/cassandra.yaml",
-      "export ip=`hostname -I` && sudo sed -ci \"s/endpoint_snitch: com.datastax.bdp.snitch.DseSimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g\" /etc/cassandra/conf/cassandra.yaml",
-      #"sudo sed -ci \"s/127.0.0.1/'${join(",", data.aws_instances.seeds.private_ips)}'/g\" /etc/cassandra/conf/cassandra.yaml",
-      "sudo sed -ci \"s/seeds:.*/seeds: '${join(",", data.aws_instances.seeds.private_ips)}'/g\" /etc/cassandra/conf/cassandra.yaml",
-      "sudo chkconfig cassandra on",
-      "sudo service cassandra start",
-      "sudo chkconfig cassandra on",
+    inline = [<<EOF
+      sudo sed -ci "s/cluster_name: 'Test Cluster'/cluster_name: '${var.cluster_name}'/g" /etc/cassandra/conf/cassandra.yaml
+      sudo sed -ci 's/num_tokens: 256/num_tokens: 8/g' /etc/cassandra/conf/cassandra.yaml
+      export ip=`hostname -I` && sudo sed -ci "s/listen_address: localhost/listen_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
+      export ip=`hostname -I` && sudo sed -ci "s/rpc_address: localhost/rpc_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
+      export ip=`hostname -I` && sudo sed -ci "s/endpoint_snitch: SimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g" /etc/cassandra/conf/cassandra.yaml
+      sudo sed -ci 's/seeds:.*/seeds: "${replace(join(",", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
+      sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
+      sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
+      sudo chkconfig cassandra on
+      EOF
     ]
   }
 }
@@ -177,9 +177,8 @@ resource "null_resource" "start_seed" {
   }
 
   provisioner "remote-exec" {
-    inline = [<<EOF
-      sudo service cassandra start
-      EOF
+    inline = [
+      "sudo service cassandra start"
     ]
   }
 }
