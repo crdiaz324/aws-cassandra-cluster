@@ -17,7 +17,7 @@ resource "aws_instance" "cassandra" {
   instance_type          = var.instance_type
   key_name               = var.ec2key_name
   subnet_id              = tolist(sort(data.aws_subnet_ids.private_ids.ids))[count.index%length(var.azs)]
-  user_data              = var.user_data_file_path
+  #user_data              = var.user_data_file_path
   vpc_security_group_ids = var.vpc_security_group_ids
 
 
@@ -56,6 +56,15 @@ resource "aws_instance" "cassandra" {
     inline = [
       "echo '${file(var.private_key_path)}' > ~/.ssh/id_rsa",
       "chmod 400 ~/.ssh/id_rsa",
+      "echo 'export TERM=xterm-256color' >> ~/.bash_profile",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64",
+      "sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm",
+      "sudo yum-config-manager --enable epel",
+      "sudo curl -L -o /etc/yum.repos.d/wireguard.repo https://copr.fedorainfracloud.org/coprs/jdoss/wireguard/repo/epel-7/jdoss-wireguard-epel-7.repo",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64 git chrony htop",
+      "sudo yum erase -y 'ntp*'",
+      "sudo service chronyd start",
+      "sudo chkconfig chronyd on",
       "for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do     [ -f $CPUFREQ ] || continue;     echo -n performance > $CPUFREQ; done",
       "echo 'net.ipv4.tcp_keepalive_time=60' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_probes=3' |sudo tee -a /etc/sysctl.conf",
@@ -77,11 +86,11 @@ resource "aws_instance" "cassandra" {
       "echo 'cassandra - nproc 32768' | sudo tee -a /etc/security/limits.d/cassandra.conf",
       "echo 'cassandra - as unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf",
       "echo never | sudo tee -a /sys/kernel/mm/transparent_hugepage/defrag",
-      "sudo mkfs.xfs -f /dev/sdb",
-      "echo 'sudo blockdev --setra 8 /dev/sdb' | sudo tee -a /etc/rc.local",
+      "sudo mkfs.xfs -f /dev/nvme1n1",
+      "echo 'sudo blockdev --setra 8 /dev/nvme1n1' | sudo tee -a /etc/rc.local",
       "sudo chmod +x /etc/rc.local",
       "sudo mkdir /var/lib/cassandra",
-      "echo '/dev/sdb  /var/lib/cassandra  xfs  defaults,noatime 1 1' |sudo tee -a /etc/fstab",
+      "echo '/dev/nvme1n1  /var/lib/cassandra  xfs  defaults,noatime 1 1' |sudo tee -a /etc/fstab",
       "sudo mount -a",
       "sudo chown -R cassandra:cassandra /var/lib/cassandra",
       "sudo tee -a /etc/yum.repos.d/cassandra.repo >/dev/null <<EOF",
@@ -146,7 +155,7 @@ resource "null_resource" "configure_cassandra" {
       export ip=`hostname -I` && sudo sed -ci "s/listen_address: localhost/listen_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
       export ip=`hostname -I` && sudo sed -ci "s/rpc_address: localhost/rpc_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
       export ip=`hostname -I` && sudo sed -ci "s/endpoint_snitch: SimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g" /etc/cassandra/conf/cassandra.yaml
-      sudo sed -ci 's/seeds:.*/seeds: "${replace(join(",", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
+      sudo sed -ci 's/seeds:.*/seeds: "${replace(join(", ", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
       sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
       sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
       sudo chkconfig cassandra on

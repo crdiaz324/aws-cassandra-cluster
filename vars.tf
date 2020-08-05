@@ -73,7 +73,7 @@ data "aws_ami" "base_ami" {
 variable  "instance_type" {
   description        = "the type of instances to use for this deployment"
   type               = string
-  default            = "m5.large"
+  default            = "r5.large"
 }
 
 #-------------- Used for module dependencies --------------#

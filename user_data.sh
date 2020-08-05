@@ -13,9 +13,9 @@ sudo service chronyd start
 sudo chkconfig chronyd on
 
 # --- these settings are for my personal vpn tunnel to the vpc --- #
-echo 'net.ipv4.conf.all.forwarding=1' |sudo tee -a /etc/sysctl.conf
-echo 'net.ipv4.conf.all.rp_filter=1' | sudo tee -a /etc/sysctl.conf
-echo '1       home' | sudo tee -a /etc/iproute2/rt_tables
-sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-sudo iptables-save | sudo tee /etc/sysconfig/iptables
-sudo sysctl -p
+#echo 'net.ipv4.conf.all.forwarding=1' |sudo tee -a /etc/sysctl.conf
+#echo 'net.ipv4.conf.all.rp_filter=1' | sudo tee -a /etc/sysctl.conf
+#echo '1       home' | sudo tee -a /etc/iproute2/rt_tables
+#sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+#sudo iptables-save | sudo tee /etc/sysconfig/iptables
+#sudo sysctl -p
