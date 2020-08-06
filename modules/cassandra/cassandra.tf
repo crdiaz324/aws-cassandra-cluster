@@ -162,6 +162,7 @@ resource "null_resource" "configure_cassandra" {
         sudo sed -ci 's/authenticator: AllowAllAuthenticator/authenticator: PasswordAuthenticator/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
         sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
+        echo 'JVM_OPTS="$JVM_OPTS -Dcassandra.consistent.rangemovement=false"' |sudo tee -a /etc/cassandra/conf/cassandra-env.sh
         sudo chkconfig cassandra on
       EOF
     ]
@@ -191,14 +192,15 @@ resource "null_resource" "start_seed" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo service cassandra start"
+      "sudo service cassandra start",
+      "sleep 60"
     ]
   }
 }
 
 resource "null_resource" "start_cluster" {
   count                  = var.instance_count
-  # Changes to any instance of the cluster requires re-provisioning
+  # Changes to any instance of the cluster will trigger a restart of the node
   triggers = {
     cluster_instance_ids = "${join(",", aws_instance.cassandra.*.id)}"
   }
