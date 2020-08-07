@@ -3,8 +3,9 @@ module "cassandra_cluster" {
   source  = "./modules/cassandra"
   #version = "0.1.0"
   vpc_id                      = aws_vpc.main.id
+  region                      = var.region
   cluster_name                = "cassandra_cluster"
-  instance_count              = 3
+  instance_count              = 1
   vpc_cidr                    = var.vpc_cidr
   azs                         = var.azs
   ami                         = data.aws_ami.base_ami.id

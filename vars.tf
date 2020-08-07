@@ -10,12 +10,12 @@ variable "aws_secret_access_key" {
 
 #---------- Region Specific Settings ---------------#
 variable "region" {
-  default 		       = "us-east-1"
+  default 		       = "us-west-2"
 }
 
 variable "azs" {
   type 			         = list
-  default 		       = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  default 		       = ["us-west-2a", "us-west-2b", "us-west-2c"]
 }
 
 
@@ -66,8 +66,8 @@ variable "wg_file_path" {
 # Base AMI
 data "aws_ami" "base_ami" {
   most_recent        = true
-  name_regex         = "tio_base_centos7-*"
-  owners             = ["702267635140"]
+  name_regex         = "CentOS Linux 7 x86_64 HVM EBS*"
+  owners             = ["679593333241"]
 }
 
 variable  "instance_type" {

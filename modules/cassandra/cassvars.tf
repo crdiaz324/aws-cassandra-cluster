@@ -3,6 +3,10 @@ variable "cluster_name" {
   default             = "default_cluster_name"
 }
 
+variable "region" {
+  type                = string
+}
+
 variable "vpc_id" {
   type                = string
 }

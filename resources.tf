@@ -3,8 +3,8 @@ terraform {
 
   backend "s3" {
     encrypt 			= "false"
-    region  			= "us-east-1"
-    bucket  			= "carlos-tf"
+    region  			= "us-west-2"
+    bucket  			= "cdtf"
     key     			= "terraform/terraform2.tfstate"
   }
 }

@@ -7,6 +7,9 @@ data "aws_subnet_ids" "private_ids" {
     values        = ["Private"]
   }
 
+  depends_on = [
+    var.aws_subnets
+  ] 
 }
 
 
@@ -165,7 +168,7 @@ resource "null_resource" "configure_cassandra" {
         sudo sed -ci 's/compaction_throughput_mb_per_sec: 16/compaction_throughput_mb_per_sec: 64/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/phi_convict_threshold: 8/phi_convict_threshold: 11/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
-        sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
+        sudo sed -ci "s/dc=dc1/dc=${var.region}/g" /etc/cassandra/conf/cassandra-rackdc.properties
         echo 'JVM_OPTS="$JVM_OPTS -Dcassandra.consistent.rangemovement=false"' |sudo tee -a /etc/cassandra/conf/cassandra-env.sh
         sudo chkconfig cassandra on
       EOF
