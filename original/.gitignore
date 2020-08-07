@@ -1,0 +1,4 @@
+.terraform/plugins/*
+.terraform/terraform.tfstate
+.terraform/modules/*
+terraform.tfvars
