@@ -1,5 +1,5 @@
 resource "aws_key_pair" "ec2key" {
-  key_name   = "ec2PublicKey"
+  key_name   = var.aws_keypair_name
   public_key = file(var.public_key_path)
 }
 

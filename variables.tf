@@ -5,23 +5,23 @@ variable region {
 
 variable azs {
   type    = list
-  default = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  default = ["us-east-1f", "us-east-1d"]
 }
 
 ############## VPC CIDR, ID #############################
 variable vpc_cidr {
   type    = list(string)
-  default = ["10.93.189.0/24", "10.164.53.0/24"]
+  default = ["10.164.47.0/24"]
 }
 
 variable vpc_id {
   type    = string
-  default = "vpc-ed17068b"
+  default = "vpc-03fa2d856d18b6d66"
 }
 
 variable cluster_name {
   type    = string
-  default = "RRCert"
+  default = "cass-test-dev"
 }
 
 ############## TAGS #############################
@@ -43,15 +43,15 @@ variable tag_contact {
 }
 variable tag_cost_code {
   type    = string
-  default = "20879"
+  default = "22519"
 }
 variable tag_environment {
   type    = string
-  default = "UAT"
+  default = "dev"
 }
 variable tag_orchestration {
   type    = string
-  default = "https://github.com/elsevier-research/parity-mhub-terraformcontrol-nonprod"
+  default = ""
 }
 variable tag_description {
   type    = string
@@ -76,5 +76,13 @@ variable instance_type {
 }
 variable instance_count {
   type    = number
-  default = 9
+  default = 2
+}
+variable aws_security_group_name{
+   type    = string
+  default = "sg_dev_cassandra_cluster"
+}
+variable aws_keypair_name {
+  type    = string
+  default = "dev_cassandra_cluster"
 }

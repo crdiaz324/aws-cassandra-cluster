@@ -1,3 +1,51 @@
+resource "aws_ebs_volume" "data" {
+  count              = var.instance_count
+
+  size               = var.data_ebs_volume_size
+  type               = "gp2"
+  availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+
+  tags = merge({
+    Name                  = "data-vol-${count.index}"
+    Description           = var.tag_description
+    node_number           = count.index
+    instance_private_ip   = tolist(aws_instance.cassandra.*.private_ip)[count.index]
+    availability_zone     = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+  }, local.common_tags)
+}
+
+ resource "aws_ebs_volume" "customlog" {
+  count               = var.instance_count
+
+  size               = var.customlog_ebs_volume_size
+  type               = "gp2"
+  availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+
+  tags = merge({
+    Name                  = "customlog-vol-${count.index}"
+    Description           = var.tag_description
+    node_number           = count.index
+    instance_private_ip   = tolist(aws_instance.cassandra.*.private_ip)[count.index]
+    availability_zone     = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+  }, local.common_tags)
+ }
+
+resource "aws_volume_attachment" "data" {
+  count       = var.instance_count
+
+  device_name = "/dev/sdb"
+  volume_id   = tolist(aws_ebs_volume.data.*.id)[count.index]
+  instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
+}
+
+resource "aws_volume_attachment" "customlog" {
+  count       = var.instance_count
+
+  device_name = "/dev/sdc"
+  volume_id   = tolist(aws_ebs_volume.customlog.*.id)[count.index]
+  instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
+}
+
 # Spin up cassandra instances
 resource "aws_instance" "cassandra" {
   count                  = var.instance_count
@@ -12,13 +60,6 @@ resource "aws_instance" "cassandra" {
   root_block_device {
     volume_type = "gp2"
     volume_size = var.root_volume_size
-  }
-
-  ebs_block_device {
-    device_name = "/dev/sdb"
-    volume_type = "gp2"
-    volume_size = var.ebs_volume_size
-    encrypted   = true
   }
 
   tags = merge({
@@ -41,11 +82,10 @@ resource "aws_instance" "cassandra" {
       "chmod 400 ~/.ssh/id_rsa",
       "sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm",
       "sudo yum-config-manager --enable epel",
-      "sudo yum install -y java-1.8.0-openjdk.x86_64 git chrony htop",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64 git htop",
       "sudo yum erase -y 'ntp*'",
       "sudo service chronyd start",
       "sudo chkconfig chronyd on",
-      "for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do     [ -f $CPUFREQ ] || continue;     echo -n performance > $CPUFREQ; done",
       "echo 'net.ipv4.tcp_keepalive_time=60' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_probes=3' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_intvl=10' |sudo tee -a /etc/sysctl.conf",
@@ -61,17 +101,7 @@ resource "aws_instance" "cassandra" {
       "echo 'vm.dirty_bytes = 1073741824'  |sudo tee -a /etc/sysctl.conf",
       "echo 'vm.zone_reclaim_mode = 0'  |sudo tee -a /etc/sysctl.conf",
       "sudo sysctl -p",
-      "echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf",
-      "echo 'cassandra - nofile 1048576' | sudo tee -a /etc/security/limits.d/cassandra.conf",
-      "echo 'cassandra - nproc 32768' | sudo tee -a /etc/security/limits.d/cassandra.conf",
-      "echo 'cassandra - as unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf",
-      "echo never | sudo tee -a /sys/kernel/mm/transparent_hugepage/defrag",
-      "sudo mkfs.xfs -f /dev/nvme1n1",
-      "echo 'sudo blockdev --setra 8 /dev/nvme1n1' | sudo tee -a /etc/rc.local",
-      "sudo chmod +x /etc/rc.local",
-      "sudo mkdir /var/lib/cassandra",
-      "echo '/dev/nvme1n1  /var/lib/cassandra  xfs  defaults,noatime 1 1' |sudo tee -a /etc/fstab",
-      "sudo mount -a && sudo chown -R cassandra:cassandra /var/lib/cassandra",
+      "echo never | sudo tee /sys/kernel/mm/transparent_hugepage/defrag",
       "sudo tee -a /etc/yum.repos.d/cassandra.repo >/dev/null <<EOF",
       "[cassandra]",
       "name=Apache Cassandra ",
@@ -81,7 +111,58 @@ resource "aws_instance" "cassandra" {
       "gpgkey=https://downloads.apache.org/cassandra/KEYS",
       "EOF",
       "sudo yum install -y libaio cassandra",
+      "echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cass.conf",
+      "echo 'cassandra - nofile 1048576' | sudo tee -a /etc/security/limits.d/cass.conf",
+      "echo 'cassandra - nproc 32768' | sudo tee -a /etc/security/limits.d/cass.conf",
+      "echo 'cassandra - as unlimited' | sudo tee -a /etc/security/limits.d/cass.conf",
+      "sudo sed -i -e 's/#-Xms4G.*/-Xms31G/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/#-Xmx4G.*/-Xmx31G/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+UseParNewGC.*/#-XX:+UseParNewGC/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+UseConcMarkSweepGC.*/#-XX:+UseConcMarkSweepGC/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+CMSParallelRemarkEnabled.*/#-XX:+CMSParallelRemarkEnabled/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:SurvivorRatio=8.*/#-XX:SurvivorRatio=8/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:MaxTenuringThreshold=1.*/#-XX:MaxTenuringThreshold=1/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:CMSInitiatingOccupancyFraction=75.*/#-XX:CMSInitiatingOccupancyFraction=75/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+UseCMSInitiatingOccupancyOnly.*/#-XX:+UseCMSInitiatingOccupancyOnly/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:CMSWaitDuration=10000.*/#-XX:CMSWaitDuration=10000/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+CMSParallelInitialMarkEnabled.*/#-XX:+CMSParallelInitialMarkEnabled/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+CMSEdenChunksRecordAlways.*/#-XX:+CMSEdenChunksRecordAlways/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/ some JVMs will fill up their heap when accessed via JMX, see CASSANDRA-6541.*/# some JVMs will fill up their heap when accessed via JMX, see CASSANDRA-6541/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/-XX:+CMSClassUnloadingEnabled.*/#-XX:+CMSClassUnloadingEnabled/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/#-XX:+UseG1GC.*/-XX:+UseG1GC/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/#-XX:G1RSetUpdatingPauseTimePercent=5.*/-XX:G1RSetUpdatingPauseTimePercent=5/g' /etc/cassandra/conf/jvm.options",
+      "sudo sed -i -e 's/#-XX:MaxGCPauseMillis=500.*/-XX:MaxGCPauseMillis=500/g' /etc/cassandra/conf/jvm.options",
       "sudo yum update -y",
+    ]
+  }
+}
+
+resource "null_resource" "post_volume_attachment"{
+  
+  count                   = var.instance_count
+  depends_on              = [aws_volume_attachment.data]
+
+  connection {
+    type             = "ssh"
+    user             = "centos"
+    host             = tolist(aws_instance.cassandra.*.private_ip)[count.index]
+    private_key      = file(var.private_key_path)
+  }
+
+ provisioner "remote-exec" {
+    inline = [
+              "sudo mkfs.xfs -f /dev/nvme1n1",
+              "echo 'sudo blockdev --setra 8 /dev/nvme1n1' | sudo tee -a /etc/rc.local",
+              "sudo chmod +x /etc/rc.local",
+              "sudo mkdir /cassandra",
+              "sudo mkdir /cassandra/data",
+              "echo '/dev/nvme1n1 /cassandra/data xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab",
+              "sudo mount -a && sudo chown -R cassandra:cassandra /cassandra/data",
+              "sudo mkfs.xfs -f /dev/nvme2n1",
+              "echo 'sudo blockdev --setra 8 /dev/nvme2n1' | sudo tee -a /etc/rc.local",
+              "sudo mkdir /cassandra/logs",
+              "echo '/dev/nvme2n1 /cassandra/logs xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab",
+              "sudo mount -a && sudo chown -R cassandra:cassandra /cassandra/logs"
     ]
   }
 }
@@ -123,6 +204,7 @@ resource "null_resource" "configure_cassandra" {
         sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
         sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
         echo 'JVM_OPTS="$JVM_OPTS -Dcassandra.consistent.rangemovement=false"' |sudo tee -a /etc/cassandra/conf/cassandra-env.sh
+
         sudo chkconfig cassandra on
       EOF
     ]

@@ -1,5 +1,5 @@
 resource "aws_security_group" "vpc_sg" {  
-  name            = "sg_cassandra_cluster"
+  name            = var.aws_security_group_name
   vpc_id          = var.vpc_id
 
 #------------------ SSH access from the VPC---------------------#
