@@ -33,7 +33,7 @@ resource "aws_ebs_volume" "data" {
 resource "aws_volume_attachment" "data" {
   count       = var.instance_count
 
-  device_name = "/dev/sdb"
+  device_name = "/dev/sdd"
   volume_id   = tolist(aws_ebs_volume.data.*.id)[count.index]
   instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
 }
@@ -41,7 +41,7 @@ resource "aws_volume_attachment" "data" {
 resource "aws_volume_attachment" "customlog" {
   count       = var.instance_count
 
-  device_name = "/dev/sdc"
+  device_name = "/dev/sdl"
   volume_id   = tolist(aws_ebs_volume.customlog.*.id)[count.index]
   instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
 }
@@ -132,6 +132,7 @@ resource "aws_instance" "cassandra" {
       "sudo sed -i -e 's/#-XX:+UseG1GC.*/-XX:+UseG1GC/g' /etc/cassandra/conf/jvm.options",
       "sudo sed -i -e 's/#-XX:G1RSetUpdatingPauseTimePercent=5.*/-XX:G1RSetUpdatingPauseTimePercent=5/g' /etc/cassandra/conf/jvm.options",
       "sudo sed -i -e 's/#-XX:MaxGCPauseMillis=500.*/-XX:MaxGCPauseMillis=500/g' /etc/cassandra/conf/jvm.options",
+      "sudo yum install xfsprogs",
       "sudo yum update -y",
     ]
   }
@@ -149,6 +150,8 @@ resource "null_resource" "post_volume_attachment"{
     private_key      = file(var.private_key_path)
   }
 
+ # TODO: Here the device link name hardcoded, this something we tried with device name but did not seems to work. Hence hardcoded.
+ # Tried the link https://binx.io/blog/2019/01/26/how-to-mount-an-ebs-volume-on-nvme-based-instance-types/ -- but no luck 
  provisioner "remote-exec" {
     inline = [
               "sudo mkfs.xfs -f /dev/nvme1n1",
@@ -156,12 +159,13 @@ resource "null_resource" "post_volume_attachment"{
               "sudo chmod +x /etc/rc.local",
               "sudo mkdir /cassandra",
               "sudo mkdir /cassandra/data",
-              "echo '/dev/nvme1n1 /cassandra/data xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab",
+              "echo `sudo blkid | grep -i nvme1n1 | awk '{print $2}' | tr -d '\"'` /cassandra/data xfs defaults,noatime 1 1 | sudo tee -a /etc/fstab",
               "sudo mount -a && sudo chown -R cassandra:cassandra /cassandra/data",
+              
               "sudo mkfs.xfs -f /dev/nvme2n1",
               "echo 'sudo blockdev --setra 8 /dev/nvme2n1' | sudo tee -a /etc/rc.local",
               "sudo mkdir /cassandra/logs",
-              "echo '/dev/nvme2n1 /cassandra/logs xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab",
+              "echo `sudo blkid | grep -i nvme2n1 | awk '{print $2}' | tr -d '\"'` /cassandra/logs xfs defaults,noatime 1 1 | sudo tee -a /etc/fstab",
               "sudo mount -a && sudo chown -R cassandra:cassandra /cassandra/logs"
     ]
   }
