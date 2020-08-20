@@ -132,7 +132,6 @@ resource "aws_instance" "cassandra" {
       "sudo sed -i -e 's/#-XX:+UseG1GC.*/-XX:+UseG1GC/g' /etc/cassandra/conf/jvm.options",
       "sudo sed -i -e 's/#-XX:G1RSetUpdatingPauseTimePercent=5.*/-XX:G1RSetUpdatingPauseTimePercent=5/g' /etc/cassandra/conf/jvm.options",
       "sudo sed -i -e 's/#-XX:MaxGCPauseMillis=500.*/-XX:MaxGCPauseMillis=500/g' /etc/cassandra/conf/jvm.options",
-      "sudo yum install xfsprogs",
       "sudo yum update -y",
     ]
   }
