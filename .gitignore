@@ -2,3 +2,5 @@
 .terraform/terraform.tfstate
 .terraform/modules/*
 terraform.tfvars
+# Local .terraform directories
+**/.terraform/*
