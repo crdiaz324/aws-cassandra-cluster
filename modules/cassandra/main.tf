@@ -52,6 +52,7 @@ resource "aws_instance" "cassandra" {
 
   ami                    = var.ami
   instance_type          = var.instance_type
+  iam_instance_profile   = var.instance_profile_name
   key_name               = var.ec2key_name
   subnet_id              = tolist(sort(data.aws_subnet_ids.private_ids.ids))[count.index%length(var.azs)]
   vpc_security_group_ids = var.vpc_security_group_ids
@@ -200,6 +201,7 @@ resource "null_resource" "configure_cassandra" {
         export ip=`hostname -I` && sudo sed -ci "s/endpoint_snitch: SimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g" /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/seeds:.*/seeds: "${replace(join(", ", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/authenticator: AllowAllAuthenticator/authenticator: PasswordAuthenticator/g' /etc/cassandra/conf/cassandra.yaml
+        sudo sed -ci 's/authorizer: AllowAllAuthorizer/authorizer: CassandraAuthorizer/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/concurrent_reads: 32/concurrent_reads: 64/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/concurrent_writes: 32/concurrent_writes: 64/g' /etc/cassandra/conf/cassandra.yaml
         sudo sed -ci 's/compaction_throughput_mb_per_sec: 16/compaction_throughput_mb_per_sec: 64/g' /etc/cassandra/conf/cassandra.yaml
@@ -260,3 +262,38 @@ resource "null_resource" "start_cluster" {
     ]
   }
 }
+
+resource "null_resource" "configure_cassandra_roles" {
+ 
+  depends_on = [null_resource.start_cluster]
+
+  connection {
+    type             = "ssh"
+    user             = "centos"
+    host             = tolist(aws_instance.cassandra.*.private_ip)[0]
+    private_key      = file(var.private_key_path)
+  }
+
+  provisioner "remote-exec" {
+    inline = [<<EOF
+              while [ ! -f /var/log/cassandra/system.log ]              
+              do
+                echo 'waiting for file to create';
+                sleep 5;              
+              done              
+              while [ `grep -c 'Starting listening for CQL*' /var/log/cassandra/system.log` -le 0 ]              
+              do
+                echo 'waiting for cassandra to start listening on port ...';                
+                sleep 5;              
+              done
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.admin_role} WITH LOGIN = true AND SUPERUSER = true AND PASSWORD = '${var.admin_role_password}'";
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.application_role} WITH LOGIN = true AND PASSWORD = '${var.application_role_password}'";
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE KEYSPACE resolver WITH replication = {'class':'NetworkTopologyStrategy', 'us-east' : 3}";
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "GRANT ALL PERMISSIONS ON KEYSPACE resolver TO RRApplicationUser";
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.monitor_role} WITH LOGIN = true AND PASSWORD = '${var.monitor_role_password}'";
+              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "GRANT SELECT ON ALL KEYSPACES TO RRMonitorUser";
+    EOF
+    ]
+  }
+}
+

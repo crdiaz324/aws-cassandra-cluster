@@ -11,3 +11,7 @@ output "instance_availability_zones" {
     instance.tags.node_number => instance.availability_zone 
   }
 }
+
+output "admin_user_password"{
+  value = var.admin_role_password
+}

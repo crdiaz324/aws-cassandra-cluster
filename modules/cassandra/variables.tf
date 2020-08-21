@@ -10,11 +10,11 @@ variable root_volume_size {
 }
 variable data_ebs_volume_size {
   type    = number
-  default = 500
+  default = 100
 }
 variable customlog_ebs_volume_size {
   type    = number
-  default = 250
+  default = 1
 }
 variable instance_type {
   type = string
@@ -99,4 +99,36 @@ locals {
 variable this_depends_on {
   type                = any
   default             = null
+}
+
+variable instance_profile_name {
+  type  = string
+}
+
+
+variable admin_role {
+  type    = string
+  default = "admin_role"
+}
+
+variable application_role {
+  type    = string
+  default = "application_role"
+}
+
+variable monitor_role {
+  type    = string
+  default = "monitor_role"
+}
+
+variable admin_role_password {
+  type    = string
+} 
+
+variable application_role_password {
+  type    = string
+}
+
+variable monitor_role_password {
+  type    = string
 }
