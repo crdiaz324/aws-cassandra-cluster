@@ -5,23 +5,23 @@ variable region {
 
 variable azs {
   type    = list
-  default = ["us-east-1f", "us-east-1d"]
+  default = ["us-east-1a", "us-east-1b","us-east-1c"]
 }
 
 ############## VPC CIDR, ID #############################
 variable vpc_cidr {
   type    = list(string)
-  default = ["10.164.47.0/24"]
+  default = ["10.93.189.0/24", "10.164.53.0/24"]
 }
 
 variable vpc_id {
   type    = string
-  default = "vpc-03fa2d856d18b6d66"
+  default = "vpc-ed17068b"
 }
 
 variable cluster_name {
   type    = string
-  default = "cass-test-dev"
+  default = "cass-test-disaster-recovery"
 }
 
 ############## TAGS #############################
