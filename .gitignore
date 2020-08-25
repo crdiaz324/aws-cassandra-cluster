@@ -2,3 +2,4 @@
 .terraform/terraform.tfstate
 .terraform/modules/*
 terraform.tfvars
+.DS_Store

@@ -74,3 +74,8 @@ variable "this_depends_on" {
   type                = any
   default             = null
 }
+
+variable customlog_ebs_volume_size {
+  type    = number
+  default = 250
+}

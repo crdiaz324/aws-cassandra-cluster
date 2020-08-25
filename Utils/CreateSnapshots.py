@@ -6,6 +6,7 @@ import os
 logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'))
 
 ec2 = boto3.resource('ec2', region_name='us-east-1')
+
 logger = logging.getLogger(__name__)
 
 # Find all the cassandra instances based on the tag
@@ -40,6 +41,5 @@ for volume in volumes:
             },
         ],
         DryRun=False
-        logger.info("Created snapshot id: {0} with tags: ")
+        #logger.info("Created snapshot id: {0} with tags: ")
     )
-
