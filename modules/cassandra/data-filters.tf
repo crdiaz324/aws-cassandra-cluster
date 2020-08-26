@@ -23,3 +23,20 @@ data "aws_instances" "seeds" {
 
   depends_on = [ aws_instance.cassandra ]
 }
+
+
+data "aws_ebs_snapshot" "data_vols" {
+  count             = var.instance_count
+  most_recent       = true
+  owners            = ["self"]
+
+  # filter {
+  #   name   = "tag:AZ"
+  #   values = ["us-east-1b"]
+  # }
+
+  filter {
+    name   = "tag:Name"
+    values = ["data-vol-*"]
+  }
+}
