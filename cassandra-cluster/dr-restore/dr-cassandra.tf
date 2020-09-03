@@ -1,35 +1,59 @@
-resource "aws_ebs_volume" "data" {
-  count              = var.instance_count
-
-  size               = var.data_ebs_volume_size
-  type               = "gp2"
-  availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
-  # snapshot_id        = tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)[count.index]
-
-  tags = merge({
-    Name                  = "data-vol-${count.index}"
-    Description           = var.tag_description
-    node_number           = count.index
-    instance_private_ip   = tolist(aws_instance.cassandra.*.private_ip)[count.index]
-    availability_zone     = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
-  }, local.common_tags)
+data "aws_ami" "base_ami" {
+  most_recent        = true
+  name_regex         = "tio_base_centos7-*"
+  owners             = ["702267635140"]
 }
 
- resource "aws_ebs_volume" "customlog" {
-  count               = var.instance_count
+data "aws_subnet_ids" "private_ids" {
+  vpc_id = var.vpc_id
 
-  size               = var.customlog_ebs_volume_size
+  filter {
+    name          = "tag:Tier"
+    values        = ["Private"]
+  }
+
+}
+
+data "aws_ebs_snapshot_ids" "data_vols" {
+  owners            = ["self"]
+  # prob need most recent flag
+  filter {
+    name   = "tag:Name"
+    values = ["data-vol-*"]
+  }
+}
+
+data "aws_ebs_snapshot" "data_vols" {
+  count             = var.instance_count
+  most_recent       = true
+  owners            = ["self"]
+  snapshot_ids      = [
+    element(data.aws_ebs_snapshot_ids.data_vols.ids, count.index)
+  ]
+
+  filter {
+    name   = "tag:Name"
+    values = ["data-vol-*"]
+  }
+}
+
+resource "aws_ebs_volume" "data" {
+  count              = var.instance_count
+  #size               = var.data_ebs_volume_size
   type               = "gp2"
   availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
-
-  tags = merge({
-    Name                  = "customlog-vol-${count.index}"
-    Description           = var.tag_description
-    node_number           = count.index
-    instance_private_ip   = tolist(aws_instance.cassandra.*.private_ip)[count.index]
-    availability_zone     = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
-  }, local.common_tags)
- }
+  # availability_zone  = concat(var.azs, var.azs)[count.index]
+  # snapshot_id = "snap-09ba744348f9ef8a0"
+  #snapshot_id        = tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)[count.index]
+  snapshot_id = element(
+      matchkeys(
+        tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)
+        ,tolist(data.aws_ebs_snapshot.data_vols.*.tags.availability_zone)
+        # ,list(concat(var.azs, var.azs)[count.index]))
+        ,list(aws_instance.cassandra.*.availability_zone)[count.index])
+        ,1
+  )
+}
 
 resource "aws_volume_attachment" "data" {
   count       = var.instance_count
@@ -37,6 +61,22 @@ resource "aws_volume_attachment" "data" {
   device_name = "/dev/sdd"
   volume_id   = tolist(aws_ebs_volume.data.*.id)[count.index]
   instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
+}
+
+resource "aws_ebs_volume" "customlog" {
+  count               = var.instance_count
+
+  size               = var.customlog_ebs_volume_size
+  type               = "gp2"
+  availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+
+  # tags = merge({
+  #   Name                  = "customlog-vol-${count.index}"
+  #   Description           = var.tag_description
+  #   node_number           = count.index
+  #   instance_private_ip   = tolist(aws_instance.cassandra.*.private_ip)[count.index]
+  #   availability_zone     = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+  # }, local.common_tags )
 }
 
 resource "aws_volume_attachment" "customlog" {
@@ -50,33 +90,40 @@ resource "aws_volume_attachment" "customlog" {
 # Spin up cassandra instances
 resource "aws_instance" "cassandra" {
   count                  = var.instance_count
-
-  ami                    = var.ami
+  ami                    = data.aws_ami.base_ami.id
   instance_type          = var.instance_type
-  iam_instance_profile   = var.instance_profile_name
   key_name               = var.ec2key_name
   subnet_id              = tolist(sort(data.aws_subnet_ids.private_ids.ids))[count.index%length(var.azs)]
+  #user_data              = var.user_data_file_path
   vpc_security_group_ids = var.vpc_security_group_ids
-
 
   root_block_device {
     volume_type = "gp2"
-    volume_size = var.root_volume_size
+    volume_size = 100
   }
 
-  tags = merge({
-      Name                = "${var.tag_environment}.${var.tag_sub_product}.${count.index}"
-      Description         = var.tag_description
-      node_type           = "cassandra"
+  # ebs_block_device {
+  #   device_name = "/dev/sdb"
+  #   volume_type = "gp2"
+  #   volume_size = 1024
+  #   encrypted   = true
+  # }
+
+  
+  tags = {
+      # DO NOT DELET THIS TAG!
+      node_type = "cassandra"
+      #######################
       node_number         = count.index
-    }, local.common_tags)
+      name                = var.tag_name
+  }
   
   connection {
     type             = "ssh"
     user             = "centos"
     host             = self.private_ip
     private_key      = file(var.private_key_path)
-    bastion_host     = "54.86.97.134"
+    bastion_host     = var.bastion_host_ip
     bastion_user     = "centos"
     bastion_host_key = file(var.private_key_path)
   }
@@ -85,14 +132,16 @@ resource "aws_instance" "cassandra" {
     inline = [
       "echo '${file(var.private_key_path)}' > ~/.ssh/id_rsa",
       "chmod 400 ~/.ssh/id_rsa",
+      "echo 'export TERM=xterm-256color' >> ~/.bash_profile",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64",
       "sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm",
       "sudo yum-config-manager --enable epel",
-      "sudo yum install -y java-1.8.0-openjdk.x86_64 git htop fuse-libs",
-      "wget https://github.com/nosqlbench/nosqlbench/releases/latest/download/nb",
-      "chmod + x nb",
+      "sudo curl -L -o /etc/yum.repos.d/wireguard.repo https://copr.fedorainfracloud.org/coprs/jdoss/wireguard/repo/epel-7/jdoss-wireguard-epel-7.repo",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64 git chrony htop",
       "sudo yum erase -y 'ntp*'",
       "sudo service chronyd start",
       "sudo chkconfig chronyd on",
+      #"for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do     [ -f $CPUFREQ ] || continue;     echo -n performance > $CPUFREQ; done",
       "echo 'net.ipv4.tcp_keepalive_time=60' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_probes=3' |sudo tee -a /etc/sysctl.conf",
       "echo 'net.ipv4.tcp_keepalive_intvl=10' |sudo tee -a /etc/sysctl.conf",
@@ -108,7 +157,7 @@ resource "aws_instance" "cassandra" {
       "echo 'vm.dirty_bytes = 1073741824'  |sudo tee -a /etc/sysctl.conf",
       "echo 'vm.zone_reclaim_mode = 0'  |sudo tee -a /etc/sysctl.conf",
       "sudo sysctl -p",
-      "echo never | sudo tee /sys/kernel/mm/transparent_hugepage/defrag",
+      "sudo yum update -y",
       "sudo tee -a /etc/yum.repos.d/cassandra.repo >/dev/null <<EOT",
       "[cassandra]",
       "name=Apache Cassandra ",
@@ -118,32 +167,93 @@ resource "aws_instance" "cassandra" {
       "gpgkey=https://downloads.apache.org/cassandra/KEYS",
       "EOT",
       "sudo yum install -y libaio cassandra",
-      "sudo yum update -y",
     ]
   }
 }
 
+data "aws_instances" "seeds" {
+
+  filter {
+    name = "tag:node_type"
+    values = ["cassandra"]
+  }
+
+  filter {
+    name = "tag:node_number"
+    values = [0,1,2]
+  }
+
+  instance_state_names = ["pending", "running", "stopped"]
+
+  depends_on = [
+    aws_instance.cassandra
+  ]
+}
+
+
 resource "null_resource" "configure_cassandra" {
   count                  = var.instance_count
-  
   # Changes to any instance of the cluster requires re-provisioning
   triggers = {
     cluster_instance_ids = "${join(",", aws_instance.cassandra.*.id)}"
   }
 
-  depends_on = [ aws_volume_attachment.data, aws_volume_attachment.customlog ]
+  depends_on = [
+    aws_volume_attachment.customlog
+  ]
 
   connection {
     type             = "ssh"
     user             = "centos"
     host             = tolist(aws_instance.cassandra.*.private_ip)[count.index]
     private_key      = file(var.private_key_path)
-    bastion_host     = "54.86.97.134"
+    bastion_host     = var.bastion_host_ip
     bastion_user     = "centos"
     bastion_host_key = file(var.private_key_path)
   }
 
-  provisioner "remote-exec" {
+  # provisioner "remote-exec" {
+  #   inline = [<<EOF
+  #     echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf
+  #     echo 'cassandra - nofile 1048576' | sudo tee -a /etc/security/limits.d/cassandra.conf
+  #     echo 'cassandra - nproc 32768' | sudo tee -a /etc/security/limits.d/cassandra.conf
+  #     echo 'cassandra - as unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf
+  #     echo never | sudo tee -a /sys/kernel/mm/transparent_hugepage/defrag
+  #     #sudo mkfs.xfs -f /dev/sdb
+  #     echo 'sudo blockdev --setra 8 /dev/nvme1n1' | sudo tee -a /etc/rc.local
+  #     echo 'sudo blockdev --setra 8 /dev/nvme2n1' | sudo tee -a /etc/rc.local
+  #     sudo chmod +x /etc/rc.local
+  #     if file -s /dev/sdc |grep '/dev/sdc: symbolic'; then echo 'creating fs on /dev/sdc'; sudo mkfs -t xfs /dev/sdc; else sleep 5; fi
+  #     echo '/dev/sdb /cassandra/data  xfs  defaults,noatime 1 1' |sudo tee -a /etc/fstab
+  #     echo '/dev/sdc /cassandra/logs xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab
+  #     sudo mount -a 
+  #     sudo mkdir -p /cassandra/data
+  #     sudo mkdir -p /cassandra/logs/{commitlog,saved_caches}
+  #     sudo chown -R cassandra:cassandra /cassandra
+  #     # while [ ! -f /etc/cassandra/conf/cassandra.yaml ]
+  #     # do
+  #     #   sleep 5
+  #     # done
+  #     echo 'JVM_OPTS="$JVM_OPTS -Dcassandra.consistent.rangemovement=false"' | sudo tee -a /etc/cassandra/conf/cassandra-env.sh
+  #     sudo sed -ci "s/cluster_name: 'Test Cluster'/cluster_name: '${var.cluster_name}'/g" /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/num_tokens: 256/num_tokens: 8/g' /etc/cassandra/conf/cassandra.yaml
+  #     export ip=`hostname -I` && sudo sed -ci "s/listen_address: localhost/listen_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
+  #     export ip=`hostname -I` && sudo sed -ci "s/rpc_address: localhost/rpc_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
+  #     export ip=`hostname -I` && sudo sed -ci "s/endpoint_snitch: SimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g" /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/seeds:.*/seeds: "${replace(join(", ", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/authenticator: AllowAllAuthenticator/authenticator: PasswordAuthenticator/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/concurrent_reads: 32/concurrent_reads: 64/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/concurrent_writes: 32/concurrent_writes: 64/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/compaction_throughput_mb_per_sec: 16/compaction_throughput_mb_per_sec: 64/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/phi_convict_threshold: 8/phi_convict_threshold: 11/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/\/var\/lib\/cassandra\/data/\/cassandra\/data/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/\/var\/lib\/cassandra\/commitlog/\/cassandra\/logs\/commitlog/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci 's/\/var\/lib\/cassandra\/saved_caches/\/cassandra\/logs\/saved_caches/g' /etc/cassandra/conf/cassandra.yaml
+  #     sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
+  #     sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
+  #     sudo chkconfig cassandra on
+  #     EOF
+    provisioner "remote-exec" {
     inline = [<<EOF
       echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cass.conf
       echo 'cassandra - nofile 1048576' | sudo tee -a /etc/security/limits.d/cass.conf
@@ -174,7 +284,6 @@ resource "null_resource" "configure_cassandra" {
       done
       echo "Found $(file -s /dev/sdd |grep nvm)"
       dvol=$(file -s /dev/sdd |awk '{print $5}' |tr -d '`'|tr -d \')
-      sudo mkfs.xfs -f /dev/$dvol
       echo 'sudo blockdev --setra 8 /dev/$dvol' | sudo tee -a /etc/rc.local
       sudo chmod +x /etc/rc.local
       sudo mkdir /cassandra
@@ -223,6 +332,7 @@ resource "null_resource" "configure_cassandra" {
   }
 }
 
+
 resource "null_resource" "start_seed" {
   # Changes to any instance of the cluster requires re-provisioning
   triggers = {
@@ -238,14 +348,15 @@ resource "null_resource" "start_seed" {
     user             = "centos"
     host             = tolist(aws_instance.cassandra.*.private_ip)[0]
     private_key      = file(var.private_key_path)
-    bastion_host     = "54.86.97.134"
+    bastion_host     = var.bastion_host_ip
     bastion_user     = "centos"
     bastion_host_key = file(var.private_key_path)
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo service cassandra start"
+       "sudo rm -rf /cassandra/data/saved_caches",
+       "sudo service cassandra start",
     ]
   }
 }
@@ -257,58 +368,25 @@ resource "null_resource" "start_cluster" {
     cluster_instance_ids = "${join(",", aws_instance.cassandra.*.id)}"
   }
 
-  depends_on = [ null_resource.start_seed ]
-  
+  depends_on = [
+    null_resource.start_seed
+  ]
+
   connection {
     type             = "ssh"
     user             = "centos"
     host             = tolist(aws_instance.cassandra.*.private_ip)[count.index]
     private_key      = file(var.private_key_path)
-    bastion_host     = "54.86.97.134"
-    bastion_user     = "centos"
-    bastion_host_key = file(var.private_key_path)
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "sudo service cassandra start"
-    ]
-  }
-}
-
-resource "null_resource" "configure_cassandra_roles" {
- 
-  depends_on = [null_resource.start_cluster]
-
-  connection {
-    type             = "ssh"
-    user             = "centos"
-    host             = tolist(aws_instance.cassandra.*.private_ip)[0]
-    private_key      = file(var.private_key_path)
-    bastion_host     = "54.86.97.134"
+    bastion_host     = var.bastion_host_ip
     bastion_user     = "centos"
     bastion_host_key = file(var.private_key_path)
   }
 
   provisioner "remote-exec" {
     inline = [<<EOF
-              while [ ! -f /var/log/cassandra/system.log ]              
-              do
-                echo 'waiting for file to create';
-                sleep 5;              
-              done              
-              while [ `grep -c 'Starting listening for CQL*' /var/log/cassandra/system.log` -le 0 ]              
-              do
-                echo 'waiting for cassandra to start listening on port ...';                
-                sleep 5;              
-              done
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.admin_role} WITH LOGIN = true AND SUPERUSER = true AND PASSWORD = '${var.admin_role_password}'";
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.application_role} WITH LOGIN = true AND PASSWORD = '${var.application_role_password}'";
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE KEYSPACE resolver WITH replication = {'class':'NetworkTopologyStrategy', 'us-east' : 3}";
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "GRANT ALL PERMISSIONS ON KEYSPACE resolver TO RRApplicationUser";
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "CREATE ROLE ${var.monitor_role} WITH LOGIN = true AND PASSWORD = '${var.monitor_role_password}'";
-              cqlsh ${aws_instance.cassandra.*.private_ip[0]} -u cassandra -p cassandra -e "GRANT SELECT ON ALL KEYSPACES TO RRMonitorUser";
-    EOF
+      sudo rm -rf /cassandra/data/saved_caches
+      sudo service cassandra start
+      EOF
     ]
   }
 }

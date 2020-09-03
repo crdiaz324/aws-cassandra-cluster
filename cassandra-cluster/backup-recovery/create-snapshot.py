@@ -13,10 +13,14 @@ instances = ec2.instances.filter(
     Filters=[{'Name': 'tag:node_type', 'Values': ['cassandra']}]
 )
 
+
 # Create a list of all the Casssandra instances
 instanceIds = []
 for instance in instances: 
     instanceIds.append(instance.id)
+
+
+logger.info("Instances to snapshot: {0}".format(instanceIds))
 
 # Find all the volumes attached to these instances
 volumes = ec2.volumes.filter(
@@ -28,8 +32,8 @@ volumes = ec2.volumes.filter(
 # Loop through all the volumes, get their tags and then 
 # create a snapshot and apply the volume tags to the snapshot
 for volume in volumes:
-    # logger.info("Starting snapshot for {0}".format(volume.id))
-    # logger.info("Adding the following tags to the sanpshot {0}".format(volume.tags))
+    logger.info("Starting snapshot for {0}".format(volume.id))
+    logger.debug("Adding the following tags to the sanpshot {0}".format(volume.tags))
     snapshot = ec2.create_snapshot(
         VolumeId=volume.id, 
         Description='testSnapshot',
@@ -40,5 +44,5 @@ for volume in volumes:
             },
         ],
         DryRun=False
-        # logger.info("Created snapshot id: {0} with tags: ")
+
     )

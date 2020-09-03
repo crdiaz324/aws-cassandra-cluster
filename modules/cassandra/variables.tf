@@ -10,11 +10,11 @@ variable root_volume_size {
 }
 variable data_ebs_volume_size {
   type    = number
-  default = 100
+  default = 200
 }
 variable customlog_ebs_volume_size {
   type    = number
-  default = 1
+  default = 10
 }
 variable instance_type {
   type = string

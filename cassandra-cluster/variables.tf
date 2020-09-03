@@ -11,12 +11,12 @@ variable azs {
 ############## VPC CIDR, ID #############################
 variable vpc_cidr {
   type    = list(string)
-  default = ["10.93.189.0/24", "10.164.53.0/24"]
+  default = ["10.1.0.0/16"]
 }
 
 variable vpc_id {
   type    = string
-  default = "vpc-ed17068b"
+  default = "vpc-08fa759a37699abc0"
 }
 
 variable cluster_name {
@@ -55,7 +55,7 @@ variable tag_orchestration {
 }
 variable tag_description {
   type    = string
-  default = "UAT Cassandra Cluster"
+  default = "DEV Cassandra Cluster"
 }
 
 locals {
@@ -72,11 +72,11 @@ locals {
 ############## KEYPAIR #############################
 variable public_key_path {
   description = "Public key path"
-  default     = "D:/elsevier/carlos-cass/keys/casstest_rsa.pub"
+  default     = "~/.ssh/aws_rsa.pub"
 }
 variable private_key_path {
   description = "Private key"
-  default     = "D:/elsevier/carlos-cass/keys/casstest_rsa"
+  default     = "~/.ssh/aws_rsa"
 }
 
 ##############  EC2 INSTANCE #############################
@@ -87,7 +87,7 @@ variable instance_type {
 }
 variable instance_count {
   type    = number
-  default = 2
+  default = 6
 }
 variable aws_security_group_name{
    type    = string
