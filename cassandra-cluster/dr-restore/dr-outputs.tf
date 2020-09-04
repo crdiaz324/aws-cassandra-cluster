@@ -28,6 +28,13 @@
 #  value       = ["${local.this_availability_zone}"]
 #}
 
+# locals {
+#   snapshots = zipmap(
+#     data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
+#     data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
+#   )
+# }
+
 output "instance_public_ip_addresses" {
   value = {
     for instance in aws_instance.cassandra:
@@ -61,3 +68,7 @@ output "ebs_snapshot_ids" {
 # output "zmatch_keys" {
 #   value = element(matchkeys(data.aws_ebs_snapshot.data_vols.*.snapshot_id, data.aws_ebs_snapshot.data_vols.*.tags.availability_zone, list(aws_instance.cassandra.*.availability_zone[0])), 2/1)
 # }
+
+output "snapshots" {
+  value = locals.snapshots
+}

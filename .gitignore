@@ -4,3 +4,4 @@
 terraform.tfvars
 # Local .terraform directories
 **/.terraform/*
+notes.txt

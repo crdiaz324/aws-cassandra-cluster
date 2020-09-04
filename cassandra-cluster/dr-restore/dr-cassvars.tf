@@ -91,7 +91,7 @@ variable "this_depends_on" {
 
 variable customlog_ebs_volume_size {
   type    = number
-  default = 250
+  default = 50
 }
 
 ############## TAGS #############################
@@ -128,7 +128,16 @@ variable tag_description {
   default = "Restored Cassandra Cluster"
 }
 
+variable snapshots {
+  type = list
+  default = []
+}
+
 locals {
+  snapshots = zipmap(
+    data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
+    data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
+  )
   common_tags = {
     Product       = var.tag_product
     SubProduct    = var.tag_sub_product
@@ -138,3 +147,4 @@ locals {
     Orchestration = var.tag_orchestration
   }
 }
+

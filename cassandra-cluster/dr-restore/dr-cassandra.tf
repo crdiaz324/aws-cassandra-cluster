@@ -1,3 +1,5 @@
+
+
 data "aws_ami" "base_ami" {
   most_recent        = true
   name_regex         = "tio_base_centos7-*"
@@ -41,18 +43,33 @@ resource "aws_ebs_volume" "data" {
   count              = var.instance_count
   #size               = var.data_ebs_volume_size
   type               = "gp2"
-  availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+  # availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
+  availability_zone = values(
+                        zipmap(data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
+                        data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
+                        )
+                      )[count.index]
   # availability_zone  = concat(var.azs, var.azs)[count.index]
   # snapshot_id = "snap-09ba744348f9ef8a0"
   #snapshot_id        = tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)[count.index]
-  snapshot_id = element(
-      matchkeys(
-        tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)
-        ,tolist(data.aws_ebs_snapshot.data_vols.*.tags.availability_zone)
-        # ,list(concat(var.azs, var.azs)[count.index]))
-        ,list(aws_instance.cassandra.*.availability_zone)[count.index])
-        ,1
-  )
+  # snapshot_id = element(
+  #     matchkeys(
+  #       tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id)
+  #       ,tolist(data.aws_ebs_snapshot.data_vols.*.tags.availability_zone)
+  #       # ,list(concat(var.azs, var.azs)[count.index]))
+  #       ,list(aws_instance.cassandra.*.availability_zone)[count.index])
+  #       ,1
+  # )
+  # tags = {'availability_zone' = values(
+  #                       zipmap(data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
+  #                       data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
+  #                       )
+  #                     )[count.index]
+  #         }
+  snapshot_id = keys(zipmap(data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
+                            data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
+                            )
+                    )[count.index]
 }
 
 resource "aws_volume_attachment" "data" {
