@@ -1,40 +1,3 @@
-#locals {
-#  this_availability_zone            = "${compact(concat(coalescelist(aws_instance.cassandra.*.availability_zone), list("")))}"
-#  this_key_name                     = "${compact(concat(coalescelist(aws_instance.cassandra.*.key_name), list("")))}"
-#  this_public_dns                   = "${compact(concat(coalescelist(aws_instance.cassandra.*.public_dns), list("")))}"
-#  this_public_ip                    = "${compact(concat(coalescelist(aws_instance.cassandra.*.public_ip), list("")))}"
-#  this_primary_network_interface_id = "${compact(concat(coalescelist(aws_instance.cassandra.*.primary_network_interface_id), list("")))}"
-#  this_private_dns                  = "${compact(concat(coalescelist(aws_instance.cassandra.*.private_dns), list("")))}"
-#  this_private_ip                   = "${compact(concat(coalescelist(aws_instance.cassandra.*.private_ip), list("")))}"
-#  this_vpc_security_group_ids       = "${compact(concat(coalescelist(flatten(aws_instance.cassandra.*.vpc_security_group_ids)), list("")))}"
-#  this_subnet_id                    = "${compact(concat(coalescelist(aws_instance.cassandra.*.subnet_id), list("")))}"
-#  this_tags                         = "${coalescelist(flatten(aws_instance.cassandra.*.tags))}"
-#  this_name                         = "${compact(concat(coalescelist(aws_instance.cassandra.*.tags.node_number)))}"
-#}
-#
-#
-#output "private_ip" {
-#  description = "List of private IP addresses assigned to the Cassandra instances"
-#  value       = ["${local.this_private_ip}"]
-#}
-#
-#output "vpc_security_group_ids" {
-#  description = "List of associated security groups of instances, if running in non-default VPC"
-#  value       = ["${local.this_vpc_security_group_ids}"]
-#}
-#
-#output "availability_zone" {
-#  description = "List of availability zones of instances"
-#  value       = ["${local.this_availability_zone}"]
-#}
-
-# locals {
-#   snapshots = zipmap(
-#     data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
-#     data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
-#   )
-# }
-
 output "instance_public_ip_addresses" {
   value = {
     for instance in aws_instance.cassandra:
@@ -42,33 +5,7 @@ output "instance_public_ip_addresses" {
   }
 }
 
-output "instance_availability_zones" {
-  value = {
-    for instance in aws_instance.cassandra:
-    instance.tags.node_number => instance.availability_zone 
-  }
-}
-
-output "snapshot_ids" {
-  value = data.aws_ebs_snapshot_ids.data_vols.ids
-}
-
-output "snapshot_azs" {
-  value = data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
-  # value = {
-  #   for data_vol in data.aws_ebs_snapshot.data_vols:
-  #     data_vol.tags.availability_zone.value
-  # }
-}
-
-output "ebs_snapshot_ids" {
-  value = data.aws_ebs_snapshot.data_vols.*.snapshot_id
-}
-
-# output "zmatch_keys" {
-#   value = element(matchkeys(data.aws_ebs_snapshot.data_vols.*.snapshot_id, data.aws_ebs_snapshot.data_vols.*.tags.availability_zone, list(aws_instance.cassandra.*.availability_zone[0])), 2/1)
-# }
-
-output "snapshots" {
-  value = locals.snapshots
+output "instance_to_volume_map" {
+  # value = local.instance_az[0]["us-east-1b"]["i-0818a39b13ef040cd"]
+  value = merge(flatten(local.inst_vol)...)
 }

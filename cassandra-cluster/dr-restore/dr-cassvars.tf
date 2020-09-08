@@ -128,16 +128,7 @@ variable tag_description {
   default = "Restored Cassandra Cluster"
 }
 
-variable snapshots {
-  type = list
-  default = []
-}
-
 locals {
-  snapshots = zipmap(
-    data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
-    data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
-  )
   common_tags = {
     Product       = var.tag_product
     SubProduct    = var.tag_sub_product
@@ -146,5 +137,145 @@ locals {
     Environment   = var.tag_environment
     Orchestration = var.tag_orchestration
   }
-}
+  # snapshot_ids = compact(concat(coalescelist(data.aws_ebs_snapshot.data_vols.*.snapshot_id), list("")))
+  # snapshots = zipmap(
+  #   tolist(data.aws_ebs_snapshot.data_vols.*.snapshot_id), 
+  #   tolist(data.aws_ebs_snapshot.data_vols.*.tags.availability_zone)
+  # )
+  # ec2_instances = zipmap(
+  #   tolist(aws_instance.cassandra.*.id),
+  #   tolist(aws_instance.cassandra.*.availability_zone)
+  # )
+  # ec2_object = [
+  #   for instance in aws_instance.cassandra: {
+  #     instance_id = instance.id
+  #     instance_az = instance.availability_zone
+  #   }
+  # ]
 
+  # This local variable creates tuple of maps of maps of strings
+  instance_az = [
+    flatten([for instance in aws_instance.cassandra: 
+      map(
+        instance.availability_zone,
+        zipmap(
+          matchkeys(
+            tolist(aws_instance.cassandra.*.id),
+            tolist(aws_instance.cassandra.*.availability_zone),  
+            [instance.availability_zone]
+          ),
+          matchkeys(
+            tolist(aws_ebs_volume.data.*.id),
+            tolist(aws_ebs_volume.data.*.availability_zone),        
+            [instance.availability_zone]
+          )
+        )
+      )
+    ])
+  ]
+
+  # Create a set of tupes of objects
+  inst_vol_to_set = {
+    s = toset(local.instance_az[0])
+  }
+  
+  # This takes the set and creates a map of instance_ids => volume_ids
+  inst_vol = [
+    flatten([for s in lookup(local.inst_vol_to_set, "s"): [
+      for key in keys(s): [
+        for idx, v in keys(s[key]): {
+          "${v}" = lookup(s[key], v)
+        }
+
+      ]
+    ]])
+  ]
+
+  # inst_vol = [
+  #   for s in lookup(local.inst_vol2, "s"): [
+  #     for key in keys(s): {
+  #       map = s[key]
+  #       values = values(s[key])
+  #       keys = keys(s[key])
+  #     }
+  #   ]
+  # ]
+
+  # inst_vol = [
+  #   for s in lookup(local.inst_vol2, "s"): [
+  #     for key in keys(s): [
+  #       for k, v in keys(s[key]): {
+  #         "${k}" = v
+  #       }
+
+  #     ]
+  #   ]
+  # ]
+
+
+
+
+  # I want to do something like this:
+  # association-list = {
+  #   for s in lookup(local.inst_vol2, "s"):
+  #     {
+  #       s => s[key]
+  #     }
+  #     # k => {      
+  #     #   for key in keys(k[v]):
+  #     #      v => ...
+  #     # }
+  # }
+
+  # lookup(local.inst_vol, "s")
+  #   for i, iv in local.instance_az: [
+  #     for key in keys(iv): [
+  #       for inst, vol in iv[key]: {
+  #         instance = inst
+  #         volume = vol 
+  #       }
+  #     ]
+  #   ]
+  # ] 
+  
+
+  # volume_az =  [
+  #   for instance in aws_instance.cassandra: {
+  #     az = instance.availability_zone
+  #     vol_id = matchkeys(
+  #       tolist(aws_ebs_volume.data.*.id),
+  #       tolist(aws_ebs_volume.data.*.availability_zone),        
+  #       [instance.availability_zone]
+  #     )
+  #   }
+  # ]
+
+  # instance_az = [
+  #   for vol in aws_ebs_volume.data: [
+  #     for instance in aws_instance.cassandra: {
+  #     az = vol.availability_zone
+  #     ec2_id = matchkeys(
+  #       tolist(aws_instance.cassandra.*.id),
+  #       tolist(aws_instance.cassandra.*.availability_zone),  
+  #       [vol.availability_zone]
+  #     )
+  #   }]
+  # ]
+  # instance_to_volume = flatten([
+  #   for az in local.instance_az.*.az:  [
+  #     for instance in local.instance_az.[az].ec2_id: {
+  #       instance_id = instance.ec2_id[1]
+  #       volume_id = local.volume_az[az].vol_id[1]
+  #     }
+  #   ]
+  # ])
+}
+# locals {
+#   local.admin_bindings_additive = merge({
+#     for role, members in local.admin_bindings : {
+#       for member in members : {
+#         role => member
+#       }
+#     }
+#   })
+# }

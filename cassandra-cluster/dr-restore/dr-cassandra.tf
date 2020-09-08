@@ -60,12 +60,15 @@ resource "aws_ebs_volume" "data" {
   #       ,list(aws_instance.cassandra.*.availability_zone)[count.index])
   #       ,1
   # )
-  # tags = {'availability_zone' = values(
+  # Commenting out the following tag because the volumes already have
+  # an attribute that ids the AZ
+  # tags = { "availability_zone" = values(
   #                       zipmap(data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
   #                       data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
   #                       )
   #                     )[count.index]
   #         }
+
   snapshot_id = keys(zipmap(data.aws_ebs_snapshot.data_vols.*.snapshot_id, 
                             data.aws_ebs_snapshot.data_vols.*.tags.availability_zone
                             )
@@ -76,13 +79,13 @@ resource "aws_volume_attachment" "data" {
   count       = var.instance_count
 
   device_name = "/dev/sdd"
-  volume_id   = tolist(aws_ebs_volume.data.*.id)[count.index]
+  # volume_id   = tolist(aws_ebs_volume.data.*.id)[count.index]
+  volume_id = lookup(merge(flatten(local.inst_vol)...), tolist(aws_instance.cassandra.*.id)[count.index])
   instance_id = tolist(aws_instance.cassandra.*.id)[count.index]
 }
 
 resource "aws_ebs_volume" "customlog" {
   count               = var.instance_count
-
   size               = var.customlog_ebs_volume_size
   type               = "gp2"
   availability_zone  = tolist(aws_instance.cassandra.*.availability_zone)[count.index]
@@ -118,14 +121,6 @@ resource "aws_instance" "cassandra" {
     volume_type = "gp2"
     volume_size = 100
   }
-
-  # ebs_block_device {
-  #   device_name = "/dev/sdb"
-  #   volume_type = "gp2"
-  #   volume_size = 1024
-  #   encrypted   = true
-  # }
-
   
   tags = {
       # DO NOT DELET THIS TAG!
@@ -229,47 +224,6 @@ resource "null_resource" "configure_cassandra" {
     bastion_host_key = file(var.private_key_path)
   }
 
-  # provisioner "remote-exec" {
-  #   inline = [<<EOF
-  #     echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf
-  #     echo 'cassandra - nofile 1048576' | sudo tee -a /etc/security/limits.d/cassandra.conf
-  #     echo 'cassandra - nproc 32768' | sudo tee -a /etc/security/limits.d/cassandra.conf
-  #     echo 'cassandra - as unlimited' | sudo tee -a /etc/security/limits.d/cassandra.conf
-  #     echo never | sudo tee -a /sys/kernel/mm/transparent_hugepage/defrag
-  #     #sudo mkfs.xfs -f /dev/sdb
-  #     echo 'sudo blockdev --setra 8 /dev/nvme1n1' | sudo tee -a /etc/rc.local
-  #     echo 'sudo blockdev --setra 8 /dev/nvme2n1' | sudo tee -a /etc/rc.local
-  #     sudo chmod +x /etc/rc.local
-  #     if file -s /dev/sdc |grep '/dev/sdc: symbolic'; then echo 'creating fs on /dev/sdc'; sudo mkfs -t xfs /dev/sdc; else sleep 5; fi
-  #     echo '/dev/sdb /cassandra/data  xfs  defaults,noatime 1 1' |sudo tee -a /etc/fstab
-  #     echo '/dev/sdc /cassandra/logs xfs defaults,noatime 1 1' |sudo tee -a /etc/fstab
-  #     sudo mount -a 
-  #     sudo mkdir -p /cassandra/data
-  #     sudo mkdir -p /cassandra/logs/{commitlog,saved_caches}
-  #     sudo chown -R cassandra:cassandra /cassandra
-  #     # while [ ! -f /etc/cassandra/conf/cassandra.yaml ]
-  #     # do
-  #     #   sleep 5
-  #     # done
-  #     echo 'JVM_OPTS="$JVM_OPTS -Dcassandra.consistent.rangemovement=false"' | sudo tee -a /etc/cassandra/conf/cassandra-env.sh
-  #     sudo sed -ci "s/cluster_name: 'Test Cluster'/cluster_name: '${var.cluster_name}'/g" /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/num_tokens: 256/num_tokens: 8/g' /etc/cassandra/conf/cassandra.yaml
-  #     export ip=`hostname -I` && sudo sed -ci "s/listen_address: localhost/listen_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
-  #     export ip=`hostname -I` && sudo sed -ci "s/rpc_address: localhost/rpc_address: $ip/g" /etc/cassandra/conf/cassandra.yaml
-  #     export ip=`hostname -I` && sudo sed -ci "s/endpoint_snitch: SimpleSnitch/endpoint_snitch: GossipingPropertyFileSnitch/g" /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/seeds:.*/seeds: "${replace(join(", ", (data.aws_instances.seeds.private_ips)), "'", "")}"/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/authenticator: AllowAllAuthenticator/authenticator: PasswordAuthenticator/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/concurrent_reads: 32/concurrent_reads: 64/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/concurrent_writes: 32/concurrent_writes: 64/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/compaction_throughput_mb_per_sec: 16/compaction_throughput_mb_per_sec: 64/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/phi_convict_threshold: 8/phi_convict_threshold: 11/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/\/var\/lib\/cassandra\/data/\/cassandra\/data/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/\/var\/lib\/cassandra\/commitlog/\/cassandra\/logs\/commitlog/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci 's/\/var\/lib\/cassandra\/saved_caches/\/cassandra\/logs\/saved_caches/g' /etc/cassandra/conf/cassandra.yaml
-  #     sudo sed -ci "s/rack=rack1/rack=${tolist(aws_instance.cassandra.*.availability_zone)[count.index]}/g" /etc/cassandra/conf/cassandra-rackdc.properties
-  #     sudo sed -ci "s/dc=dc1/dc=us-east/g" /etc/cassandra/conf/cassandra-rackdc.properties
-  #     sudo chkconfig cassandra on
-  #     EOF
     provisioner "remote-exec" {
     inline = [<<EOF
       echo 'cassandra - memlock unlimited' | sudo tee -a /etc/security/limits.d/cass.conf
