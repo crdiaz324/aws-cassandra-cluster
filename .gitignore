@@ -4,4 +4,10 @@
 terraform.tfvars
 # Local .terraform directories
 **/.terraform/*
+**/terraform.tfstate
+**/terraform.tfstate.backup
 notes.txt
+cassandra-cluster/dr-restore/terraform.tfstate
+cassandra-cluster/dr-restore/terraform.tfstate.backup
+*.tfstate
+*.tfstate.*

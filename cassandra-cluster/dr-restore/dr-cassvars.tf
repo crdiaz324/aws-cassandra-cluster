@@ -190,7 +190,7 @@ locals {
       ]
     ]])
   ]
-
+}
   # inst_vol = [
   #   for s in lookup(local.inst_vol2, "s"): [
   #     for key in keys(s): {
@@ -269,7 +269,7 @@ locals {
   #     }
   #   ]
   # ])
-}
+
 # locals {
 #   local.admin_bindings_additive = merge({
 #     for role, members in local.admin_bindings : {
