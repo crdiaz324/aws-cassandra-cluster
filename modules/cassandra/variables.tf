@@ -6,7 +6,7 @@ variable cluster_name {
 ################ EC2 CONFIGURATIONS ################
 variable root_volume_size {
   type    = number
-  default = 100
+  default = 75
 }
 variable data_ebs_volume_size {
   type    = number

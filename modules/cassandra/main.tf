@@ -87,7 +87,7 @@ resource "aws_instance" "cassandra" {
       "chmod 400 ~/.ssh/id_rsa",
       "sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm",
       "sudo yum-config-manager --enable epel",
-      "sudo yum install -y java-1.8.0-openjdk.x86_64 git htop fuse-libs",
+      "sudo yum install -y java-1.8.0-openjdk.x86_64 git htop fuse-libs fuse",
       "wget https://github.com/nosqlbench/nosqlbench/releases/latest/download/nb",
       "chmod +x nb",
       "sudo yum erase -y 'ntp*'",
