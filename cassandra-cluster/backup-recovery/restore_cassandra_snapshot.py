@@ -5,12 +5,15 @@ import os, sys
 import paramiko
 from paramiko import AutoAddPolicy
 from paramiko.ssh_exception import SSHException
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
+
 
 keyfile     = '/Users/cdiaz/.ssh/datastax_aws.rsa'
 user        =  'centos'
 data_dir    =  '/cassandra/data'
 keyspaces   = ['baselines']
-tables      = ['iot', 'keyvalue']
+tables      = ['iot', 'tabular', 'emp']
 # keyspaces   = ['resolver']
 # tables = ['cluster_ext_consensus_by_clusterid','bib_by_bibid','cluster_by_clusterid','cluster_main_consensus_by_clusterid','cluster_by_cluster_key']
 
@@ -21,6 +24,10 @@ logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'))
 
 ec2 = boto3.resource('ec2', region_name='us-east-1')
 logger = logging.getLogger(__name__)
+
+ssm = boto3.client('ssm')
+parameter = ssm.get_parameter(Name='admin_user_password', WithDecryption=True)
+
 
 # Find all the cassandra instances based on the tag
 instances = ec2.instances.filter(
@@ -34,6 +41,17 @@ instances = ec2.instances.filter(
         }
     ]
 )
+
+def truncate_tables(ip):
+    auth_provider = PlainTextAuthProvider(username='cassandra', password=parameter['Parameter']['Value'])
+    cluster = Cluster([ip], auth_provider=auth_provider, protocol_version=3)
+    session = cluster.connect()
+    for keyspace in keyspaces:
+        session.set_keyspace(keyspace)
+        for table in tables:
+            truncate_cmd = "truncate table {}".format(table)
+            session.execute(truncate_cmd)
+    cluster.shutdown()
 
 def restore_snapshot(ip, keyspace):
     ssh.connect(
@@ -62,7 +80,7 @@ def restore_snapshot(ip, keyspace):
         dir = dir.rstrip("\n")
         clear_dir_cmd = "cd {}/latest/ && sudo rm -rf ../../*.{{db,txt,crc32}}".format(dir)
         stdin, stdout, stderr = ssh.exec_command(clear_dir_cmd)
-        cp_cmd = "cd {}/latest/ && sudo cp -p {}/latest/*.db  ../../".format(dir, dir)
+        cp_cmd = "cd {}/latest/ && sudo cp -p {}/latest/*.db  ../../".format(dir, dir, dir)
         stdin, stdout, stderr = ssh.exec_command(cp_cmd)
         for table in tables:
             refresh_cmd = "nodetool refresh -- {} {}".format(keyspace, table)
@@ -74,6 +92,7 @@ instanceIps = []
 for instance in instances: 
     instanceIps.append(instance.private_ip_address)
 
+truncate_tables(instanceIps[0])
 
 for ip in instanceIps:
     for keyspace in keyspaces:
